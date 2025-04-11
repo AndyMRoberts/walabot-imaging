@@ -22,6 +22,7 @@ from os import system
 import importlib.util
 from os.path import join, exists
 import pyvista as pv
+import pyvistaqt as pvqt
 import numpy as np
 import math
 import time
@@ -144,36 +145,39 @@ def generate_volume():
 if __name__ == '__main__':
     # Prepare the graph and show the first result
     #p = pv.Plotter()
-    p = pv.Plotter()
+    p = pvqt.BackgroundPlotter()
     point_cloud = generate_volume()
-    mesh_actor = p.add_mesh(point_cloud, cmap='jet', clim=[50, 255], opacity="linear")
+    #mesh_actor = p.add_mesh(point_cloud, cmap='jet', clim=[50, 255], opacity="linear")
+    p.add_mesh(point_cloud, cmap='jet', clim=[50, 255], opacity="linear")
     p.camera_position = [-2, 5, 3]
+    p.view_isometric()
     #p.show_axes()
     #p.show_bounds()
-    p.show(interactive_update=True, auto_close=False)
+    #p.show(interactive_update=True, auto_close=False)
     time.sleep(1)
 
     i = 0
     while True:
         #grab the next radar image and update the point cloud
         print(i)
-        print(f"PARAM_CONFIDENCE_FACTOR: {wlbt.GetAdvancedParameter(wlbt.PARAM_CONFIDENCE_FACTOR)}")
-        print(f"PARAM_DIELECTRIC_CONSTANT: {wlbt.GetAdvancedParameter(wlbt.PARAM_DIELECTRIC_CONSTANT)}")
-        start_time = time.time()
+        #print(f"PARAM_CONFIDENCE_FACTOR: {wlbt.GetAdvancedParameter(wlbt.PARAM_CONFIDENCE_FACTOR)}")
+        #print(f"PARAM_DIELECTRIC_CONSTANT: {wlbt.GetAdvancedParameter(wlbt.PARAM_DIELECTRIC_CONSTANT)}")
+        #start_time = time.time()
         point_cloud = generate_volume()
-        p.remove_actor(mesh_actor)
-        mesh_actor = p.add_mesh(point_cloud, cmap='jet', clim=[50, 255], opacity="linear")
-        p.show(interactive_update=True, auto_close=False)
-        end_time = time.time()
-        print(f"volume generation time: {end_time - start_time:.4f} seconds")
-        start_time_r = time.time()
-        p.update()  # Force update the renderer
+        #p.remove_actor(mesh_actor)
+        #p.add_mesh(point_cloud, cmap='jet', clim=[50, 255], opacity="linear")
+        #p.show(interactive_update=True, auto_close=False)
+        #end_time = time.time()
+        #print(f"volume generation time: {end_time - start_time:.4f} seconds")
+        #start_time_r = time.time()
+        #p.update()  # Force update the renderer
         p.render()
+        p.app.processEvents()
         # added in as sometimes the render disappears and this seems to fix it
         #time.sleep(0.1)
-        end_time_r = time.time()
-        print(f"Render Time: {end_time_r - start_time_r:.4f} seconds")
-        print(f"FPS: {1 / (end_time_r - start_time):.4f}")
+        #end_time_r = time.time()
+        #print(f"Render Time: {end_time_r - start_time_r:.4f} seconds")
+        #print(f"FPS: {1 / (end_time_r - start_time):.4f}")
         i += 1
 
 
