@@ -1,0 +1,7 @@
+# Ignore everything
+*
+
+# But not these files/folders:
+!.gitignore
+!my_code/
+!my_code/**
