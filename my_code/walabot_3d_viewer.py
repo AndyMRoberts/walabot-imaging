@@ -40,9 +40,7 @@ def load_source(module_name, path):
     spec.loader.exec_module(module)
     return module
 
-
 # Set walabot volume of scan parameters, the smaller and lower res the area, the fast the scan
-
 range_cm = 150
 resolution_r = 2
 all_angles = 45
@@ -51,6 +49,7 @@ resolution_angle = 2
 print("Loading source...")
 wlbt = load_source('WalabotAPI', modulePath)
 wlbt.Init()
+
 print("Starting plotting...")
 # Walabot_SetArenaR - input parameters
 minInCm, maxInCm, resInCm = 5, range_cm, resolution_r
@@ -81,30 +80,18 @@ wlbt.SetArenaPhi(minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees)
 # Dynamic-imaging filter for the specific frequencies typical of breathing
 wlbt.SetDynamicImageFilter(wlbt.FILTER_TYPE_NONE)
 # 3) Start: Start the system in preparation for scanning.
-
-wlbt.StartCalibration()
-while wlbt.GetStatus()[0] == wlbt.STATUS_CALIBRATING:
-    wlbt.Trigger()
-
 wlbt.Start()
 
-# # Setup the 3D space
-# l = 650  # in pixels
-# x, y, z = np.mgrid[-l:l:100j, -l:l:100j, -l:l:100j]
-#
-# # PyVista UniformGrid setup
-# grid = ImageData()
-# grid.dimensions = x.shape
-# grid.origin = (-10, -10, -10)
-# grid.spacing = (20/100, 20/100, 20/100)
-#
-# # Setup plotter
-# plotter = pv.Plotter()
-# plotter.add_axes()
-# plotter.add_title("Walabot 3d Imaging")
-#
-# # Start interactive window (non-blocking)
-# plotter.show(interactive_update=True, auto_close=False)
+calibration = True
+
+if calibration:
+    print("Starting Calibration...")
+    wlbt.StartCalibration()
+    while wlbt.GetStatus()[0] == wlbt.STATUS_CALIBRATING:
+        print("Calibrating...")
+        wlbt.Trigger()
+else:
+    print("Calibration Off")
 
 def EndWalabot():
     wlbt.Stop()
