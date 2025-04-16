@@ -22,6 +22,7 @@ Dependencies:
 from __future__ import print_function # WalabotAPI works on both Python 2 an 3.
 import sys
 sys.path.append('/usr/share/walabot/python')
+sys.path.append('C:/Program Files/Walabot/WalabotSDK/python/WalabotAPI.py')
 from sys import platform
 from os import system
 import importlib.util
@@ -64,12 +65,8 @@ plot.getAxis('left').setStyle(
     tickLength=5,
     textFillLimits=[(0, 0.1)]  # Force scientific notation for small values
 )
-
 # Enable auto-scaling with some padding
 plot.enableAutoRange(axis='y', enable=True)
-plot.setYRange(0, 1)
-plot.setXRange(5e9,8e9)# Start with minimum 0.0001 range
-plot.setYRange(0, 0.002)
 colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
 
 
@@ -89,38 +86,61 @@ print("Loading source...")
 wlbt = load_source('WalabotAPI', modulePath)
 wlbt.Init()
 print("Starting plotting...")
-# Walabot_SetArenaR - input parameters
-minInCm, maxInCm, resInCm = 5, 150, 1
-# Walabot_SetArenaTheta - input parameters
-minIndegrees, maxIndegrees, resIndegrees = -30, 30, 2
-# Walabot_SetArenaPhi - input parameters
-minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees = -30, 30, 2
 # Initializes walabot lib
 wlbt.Initialize()
 # 1) Connect : Establish communication with walabot.
 wlbt.ConnectAny()
 # 2) Configure: Set scan profile and arena
 # Set Profile - to Sensor-Narrow.
-wlbt.SetProfile(wlbt.PROF_SENSOR)
-# Setup arena - specify it by Cartesian coordinates.
-wlbt.SetArenaR(minInCm, maxInCm, resInCm)
-# Sets polar range and resolution of arena (parameters in degrees).
-wlbt.SetArenaTheta(minIndegrees, maxIndegrees, resIndegrees)
-# Sets azimuth range and resolution of arena.(parameters in degrees).
-wlbt.SetArenaPhi(minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees)
-# Dynamic-imaging filter for the specific frequencies typical of breathing
+profile = wlbt.PROF_SHORT_RANGE_IMAGING
+wlbt.SetProfile(profile)
+if profile == wlbt.PROF_SENSOR:
+    # Distance scanning through air; high-resolution images, but slower capture rate.
+    time_units = 10000
+    plot.setYRange(0, 0.002)
+    plot.setXRange(5e9, 8e9)
+    # Walabot_SetArenaR - input parameters
+    minInCm, maxInCm, resInCm = 5, 150, 1
+    # Walabot_SetArenaTheta - input parameters
+    minIndegrees, maxIndegrees, resIndegrees = -30, 30, 2
+    # Walabot_SetArenaPhi - input parameters
+    minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees = -30, 30, 2
+    # Setup arena - specify it by Cartesian coordinates.
+    wlbt.SetArenaR(minInCm, maxInCm, resInCm)
+    # Sets polar range and resolution of arena (parameters in degrees).
+    wlbt.SetArenaTheta(minIndegrees, maxIndegrees, resIndegrees)
+    # Sets azimuth range and resolution of arena.(parameters in degrees).
+    wlbt.SetArenaPhi(minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees)
+elif profile == wlbt.PROF_SHORT_RANGE_IMAGING:
+    # Short-range, penetrative scanning in dielectric materials.
+    time_units = 10000
+    plot.setYRange(0, 0.01)
+    plot.setXRange(1e9, 2e9)
+    xmin, xmax, xres = -1.0, 1.0, 0.1
+    ymin, ymax, yres = -1.0, 1.0, 0.1
+    zmin, zmax, zres = 3.0, 5.0, 0.1
+
+    wlbt.SetArenaX(xmin, xmax, xres)
+    wlbt.SetArenaY(ymin, ymax, yres)
+    wlbt.SetArenaZ(zmin, zmax, zres)
+elif profile == wlbt.PROF_SHORT_RANGE_SINGLE_LINE:
+    pass
 wlbt.SetDynamicImageFilter(wlbt.FILTER_TYPE_NONE)
-# 3) Start: Start the system in preparation for scanning.
 wlbt.Start()
 
+# determine antenna pairs to use
 antenna_pairs = [AntennaPair]
-antenna_pairs = wlbt.GetAntennaPairs()
+antennas_all = True
+if antennas_all:
+    antenna_pairs = wlbt.GetAntennaPairs()
+else:
+    antenna_pairs = [AntennaPair(1, 2), AntennaPair(1, 3)]
 
 signal_list= [[0] for _ in range(len(antenna_pairs))]
 fft_list = [[0] for _ in range(len(antenna_pairs))]
 curves = [plot.plot(x, y) for _ in antenna_pairs]
 # fudge factor, 10000 implies units of time on x axis are 10ms
-x_units = 10000
+
 
 calibration = False
 if calibration:
@@ -158,10 +178,9 @@ def custom_fft(signal):
     time_axis = signal[1]
     num_samples = len(signal[1])
     dt = (time_axis[1] - time_axis[0])
-    print(time_axis[0], time_axis[1])
-    sampling_rate = 1.0 / dt
+    #print(time_axis[0], time_axis[1])
     k = np.arange(num_samples)
-    freq = k/(x_units * dt)
+    freq = k/(time_units * dt)
     upperbound = int((num_samples)/ 2)
     #print(upperbound)
     freq = freq[0: upperbound + 1]
