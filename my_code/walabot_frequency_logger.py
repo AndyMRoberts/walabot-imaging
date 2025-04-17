@@ -14,18 +14,19 @@ Usage:
 Dependencies:
     - pyqtgraph
     - numpy
-    - datetime
     - csv
     - Walabot SDK
 
 """
 from __future__ import print_function # WalabotAPI works on both Python 2 an 3.
 import sys
+
 sys.path.append('/usr/share/walabot/python')
 sys.path.append('C:/Program Files/Walabot/WalabotSDK/python/WalabotAPI.py')
 import importlib.util
 from os.path import join, exists
 from sys import platform
+from WalabotAPI import AntennaPair
 
 import numpy as np
 import pyqtgraph as pg
@@ -135,7 +136,7 @@ class WalabotVisualizer:
         elif profile == self.wlbt.PROF_SHORT_RANGE_IMAGING:
             # Short-range, penetrative scanning in dielectric materials.
             self.time_units = 10000
-            self.plot.setYRange(0, 0.01)
+            self.plot.setYRange(0, 0.02)
             self.plot.setXRange(1e9, 2e9)
             xmin, xmax, xres = -1.0, 1.0, 0.1
             ymin, ymax, yres = -1.0, 1.0, 0.1
@@ -151,6 +152,7 @@ class WalabotVisualizer:
 
         # determine antenna pairs to use
         self.antenna_pairs = self.wlbt.GetAntennaPairs()
+        print(f"{len(self.antenna_pairs)} antenna pairs loaded")
         self.curves = [self.plot.plot(self.x, self.y) for _ in self.antenna_pairs]
         self.raw_data = np.zeros((iterations, len(self.antenna_pairs), 2, 2048))
         self.fft_data = np.zeros((iterations, len(self.antenna_pairs), self.signal_size))
