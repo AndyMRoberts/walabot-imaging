@@ -20,5 +20,6 @@ plt.imshow(np.abs(fft_data_single), aspect='auto', cmap='viridis', origin='lower
 plt.ylabel('Frequency [Hz]')
 plt.xlabel('Antenna')
 plt.colorbar(label='Signal Intensity')
+
 plt.title('Spectrogram')
 plt.show()
