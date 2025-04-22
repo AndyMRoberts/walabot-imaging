@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 from scipy import signal
 
 #load data from file
-fft_data_all = np.load('classification/data/andy_practice/fft_data.npy')
-fft_data_single = np.transpose(fft_data_all[119,:,115:145])
+fft_data_all = np.load('fft_data.npy')
+fft_data_single = np.transpose(fft_data_all[0,:,115:145])
+
 
 print(fft_data_single.shape)
 

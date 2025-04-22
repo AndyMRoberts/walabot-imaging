@@ -31,6 +31,7 @@ from WalabotAPI import AntennaPair
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
+from tqdm import tqdm
 
 class WalabotVisualizer:
     def __init__(self, class_name, iterations, signal_size):
@@ -86,6 +87,8 @@ class WalabotVisualizer:
 
     def start_timer(self):
         # timer to update the plot every 100ms
+        # Initialize the progress bar once
+        self.pbar = tqdm(total=self.iterations, desc="Processing iterations", unit="iteration", ncols=100, bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} iterations")
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(100)
@@ -138,9 +141,9 @@ class WalabotVisualizer:
             self.time_units = 10000
             self.plot.setYRange(0, 0.02)
             self.plot.setXRange(1e9, 2e9)
-            xmin, xmax, xres = -1.0, 1.0, 0.1
-            ymin, ymax, yres = -1.0, 1.0, 0.1
-            zmin, zmax, zres = 3.0, 5.0, 0.1
+            xmin, xmax, xres = -2.0, 2.0, 0.1
+            ymin, ymax, yres = -2.0, 2.0, 0.1
+            zmin, zmax, zres = 2.0, 4.0, 0.1
 
             self.wlbt.SetArenaX(xmin, xmax, xres)
             self.wlbt.SetArenaY(ymin, ymax, yres)
@@ -171,7 +174,7 @@ class WalabotVisualizer:
         # get signal value
         if self.iterations <= 0:
             self.timer.stop()
-            print("Reached specified iterations. Please close the graph window.")
+            print("\nReached specified iterations. Please close the graph window.")
             return
 
         try:
@@ -192,7 +195,12 @@ class WalabotVisualizer:
             color = self.colors[n % len(self.colors)]
             curve.setPen(color)
 
+        # update progress bar
+        self.pbar.update(1)
+
+        # count down the iterations left
         self.iterations -= 1
+
 
     def get_antenna_pairs(self):
         print(self.wlbt.GetAntennaPairs())
@@ -257,5 +265,6 @@ if __name__ == '__main__':
     signal_size = 1025
     visualizer = WalabotVisualizer(class_name, iterations, signal_size)
     visualizer.run()
+
 
 
