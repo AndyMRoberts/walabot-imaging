@@ -1,15 +1,15 @@
 """
-walabot_frequency_visualisation.py
+walabot_trained_classifier.py
 
 Description:
-    Live graphing and logging of Walabot frequency data for later classification.
+    Live reading and classifying of data
 
 Author: Andy Roberts
-Created: 2025-04-10
+Created: 2025-04-22
 Version: 1.0
 
 Usage:
-    Run this script to visualize and log signal data from a Walabot sensor in real-time.
+    Run this script to see what the model thinks the material in front of the walabot is.
 
 Dependencies:
     - pyqtgraph
@@ -20,31 +20,34 @@ Dependencies:
 """
 from __future__ import print_function # WalabotAPI works on both Python 2 an 3.
 import sys
+
 sys.path.append('/usr/share/walabot/python')
 sys.path.append('C:/Program Files/Walabot/WalabotSDK/python/WalabotAPI.py')
-import os
-os.environ["QT_QPA_PLATFORM"] = "xcb"
 import importlib.util
 from os.path import join, exists
 from sys import platform
 from WalabotAPI import AntennaPair
 
+# for graphing and UI
 import numpy as np
 import pyqtgraph as pg
 from pyqtgraph.Qt import QtWidgets
-from tqdm import tqdm
+import matplotlib.pyplot as plt
+
+#for model usage
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 class WalabotVisualizer:
-    def __init__(self, class_name, iterations):
-        self.class_name = class_name
-        self.iterations = iterations
+    def __init__(self, signal_size):
+        self.signal_size = signal_size
         self.antenna_pairs = []
-        self.curves = []
         self.timer = None
-        self.lower_freq_index = 115
-        self.upper_freq_index = 145
-        self.freq_range = self.upper_freq_index - self.lower_freq_index
-        self.signal_size = 1025
+        self.fft_window_lower_bound = 115
+        self.fft_window_upper_bound = 145
+        self.fft_window_size = self.fft_window_upper_bound - self.fft_window_lower_bound
+
 
     def run(self):
         try:
@@ -56,9 +59,6 @@ class WalabotVisualizer:
             print(f"[ERROR] An exception occurred: {e}")
         finally:
             self.end_walabot()
-            #self.store_data(self.raw_data, 'raw_data') # turn this back on for important data collection
-            self.store_data(self.fft_data, 'fft_data')
-            self.store_data(self.labels, 'labels')
 
     def start_plot(self):
         # Create a Qt application
@@ -66,33 +66,30 @@ class WalabotVisualizer:
 
         # Create a plot window
         self.win = pg.GraphicsLayoutWidget(show=True)
-        self.win.setWindowTitle("Live Signal Graph")
+        self.win.setWindowTitle("Live Spectrogram")
         self.win.setBackground('w')  # 'w' = white, or use '#FFFFFF'
+
         self.plot = self.win.addPlot()
-        self.plot.getViewBox().setBackgroundColor('w')
-        self.plot.setLabel('left', 'Amplitude', units='a.u')
-        self.plot.setLabel('bottom', 'Frequency')
-        self.plot.setMenuEnabled(True)
+        self.img = pg.ImageItem()
+        self.plot.addItem(self.img)
 
-        # Initialize data
-        self.x = np.arange(100)
-        self.y = np.zeros(100, dtype=np.float64)
+        # Optional: Set color map
+        colormap = pg.colormap.get('inferno')  # or 'viridis', 'plasma', etc.
+        lut = colormap.getLookupTable(0.0, 1.0, 256)
+        self.img.setLookupTable(lut)
+        self.img.setLevels([0, 1])  # Set intensity range (adjust as needed)
 
-        # Configure y-axis for small energy values
-        self.plot.setLabel('left', 'Amplitude')  # 'a.u.' = arbitrary units
-        self.plot.getAxis('left').setStyle(
-            showValues=True,
-            tickLength=5,
-            textFillLimits=[(0, 0.1)]  # Force scientific notation for small values
-        )
-        # Enable auto-scaling with some padding
-        self.plot.enableAutoRange(axis='y', enable=True)
-        self.colors = ['r', 'g', 'b', 'c', 'm', 'y', 'k']
+        # Label axes
+        self.plot.setLabel('left', 'Frequency Bin')
+        self.plot.setLabel('bottom', 'Antenna Pair')
+        self.plot.setYRange(0, 30)
+        self.plot.setXRange(0, 153)
+
+        # This holds the spectrogram data history (e.g., last N FFTs)
+        #self.spectrogram_buffer = np.zeros((128, 100))
 
     def start_timer(self):
         # timer to update the plot every 100ms
-        # Initialize the progress bar once
-        self.pbar = tqdm(total=self.iterations, desc="Processing iterations", unit="iteration", ncols=100, bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} iterations")
         self.timer = pg.QtCore.QTimer()
         self.timer.timeout.connect(self.update)
         self.timer.start(100)
@@ -125,9 +122,7 @@ class WalabotVisualizer:
         self.wlbt.SetProfile(profile)
         if profile == self.wlbt.PROF_SENSOR:
             # Distance scanning through air; high-resolution images, but slower capture rate.
-            self.time_units = 10000 # determined empirically to shift frequencies into expected range
-            self.plot.setYRange(0, 0.002)
-            self.plot.setXRange(5e9, 8e9)
+            self.time_units = 10000
             # Walabot_SetArenaR - input parameters
             minInCm, maxInCm, resInCm = 5, 150, 1
             # Walabot_SetArenaTheta - input parameters
@@ -142,9 +137,7 @@ class WalabotVisualizer:
             self.wlbt.SetArenaPhi(minPhiInDegrees, maxPhiInDegrees, resPhiInDegrees)
         elif profile == self.wlbt.PROF_SHORT_RANGE_IMAGING:
             # Short-range, penetrative scanning in dielectric materials.
-            self.time_units = 10000 / 5 # determined empirically to shift frequencies into expected range
-            self.plot.setYRange(0, 0.02)
-            self.plot.setXRange(5e9, 8e9)
+            self.time_units = 10000
             xmin, xmax, xres = -2.0, 2.0, 0.1
             ymin, ymax, yres = -2.0, 2.0, 0.1
             zmin, zmax, zres = 2.0, 4.0, 0.1
@@ -159,11 +152,8 @@ class WalabotVisualizer:
 
         # determine antenna pairs to use
         self.antenna_pairs = self.wlbt.GetAntennaPairs()
+        self.fft_data = np.zeros((len(self.antenna_pairs), self.fft_window_size))
         print(f"{len(self.antenna_pairs)} antenna pairs loaded")
-        self.curves = [self.plot.plot(self.x, self.y) for _ in self.antenna_pairs]
-        self.raw_data = np.zeros((iterations, len(self.antenna_pairs), 2, 2048))
-        self.fft_data = np.zeros((iterations, len(self.antenna_pairs), self.freq_range))
-        self.labels = np.array([self.class_name]* self.iterations)
 
         calibration = False
         if calibration:
@@ -175,12 +165,6 @@ class WalabotVisualizer:
             print("Calibration off.")
 
     def update(self):
-        # get signal value
-        if self.iterations <= 0:
-            self.timer.stop()
-            print("\nReached specified iterations. Please close the graph window.")
-            return
-
         try:
             self.wlbt.Trigger()
         except Exception as e:
@@ -189,21 +173,17 @@ class WalabotVisualizer:
 
         for n, pair in enumerate(self.antenna_pairs):
             signal = np.array(self.wlbt.GetSignal(pair))
-            self.raw_data[self.iterations - 1, n,:,:] = signal
             freq, fft_vals = self.custom_fft(signal)
-            self.fft_data[self.iterations - 1, n, :] = fft_vals[self.lower_freq_index:self.upper_freq_index]
-            self.curves[n] .setData(freq, fft_vals)
+            #converting to correct format for model eval
+            self.fft_data[n, :] = fft_vals[self.fft_window_lower_bound:self.fft_window_upper_bound]
 
-            # plot ffts
-            curve = self.curves[n]
-            color = self.colors[n % len(self.colors)]
-            curve.setPen(color)
+        image = self.fft_data.astype(np.float32)
+        # Normalize your data as needed (optional)
+        signal_spectrogram = np.abs(image)
+        signal_spectrogram = signal_spectrogram / np.max(signal_spectrogram)
 
-        # update progress bar
-        self.pbar.update(1)
-
-        # count down the iterations left
-        self.iterations -= 1
+        # Update the plot image
+        self.img.setImage(signal_spectrogram, autoLevels=False)
 
 
     def get_antenna_pairs(self):
@@ -212,7 +192,7 @@ class WalabotVisualizer:
     def custom_fft(self, signal):
         """
         Performs custom FFT
-        :param signal: signal in time domain
+        :param s: signal in time domain
         :return: signal in frequency domain
         """
         # print(len(signal[0]), len(signal[1]))
@@ -229,20 +209,6 @@ class WalabotVisualizer:
 
         return freq, fft_vals
 
-    def store_data(self, data, name):
-        filename = f'{name}.npy'
-        print(f"Saving {filename}.")
-        if not exists(filename):
-            np.save(filename, data)
-            print(f"Saved data to '{filename}'")
-        else:
-            existing = np.load(filename)
-            if existing.shape[1:] != data.shape[1:]:
-                raise ValueError("Shape mismatch when appending data.")
-            combined = np.concatenate((existing, data), axis=0)
-            np.save(filename, combined)
-            print(f"Appended data to '{filename}', new shape: {combined.shape}")
-
     def end_walabot(self):
         if hasattr(self, 'wlbt'):
             try:
@@ -254,19 +220,10 @@ class WalabotVisualizer:
                 print(f"[WARNING] Could not shut down Walabot cleanly: {e}")
 
 if __name__ == '__main__':
-    try:
-        class_name = input("Please enter the classification name:")
-    except ValueError as e:
-        print(f"[ERROR] Invalid input: {e}")
-        sys.exit(1)
-    try:
-        iterations = int(input("Please enter the number of iterations: "))
-        if iterations <= 0:
-            raise ValueError("Number of iterations must be positive.")
-    except ValueError as e:
-        print(f"[ERROR] Invalid input: {e}")
-        sys.exit(1)
-    visualizer = WalabotVisualizer(class_name, iterations)
+    print("Walabot will start and output the class name it thinks it is 'seeing'")
+    signal_size = 1025
+    visualizer = WalabotVisualizer(signal_size)
+    #start up walabot functionality
     visualizer.run()
 
 
